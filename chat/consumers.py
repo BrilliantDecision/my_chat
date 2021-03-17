@@ -4,6 +4,9 @@ from channels.generic.websocket import (WebsocketConsumer, AsyncWebsocketConsume
                                         JsonWebsocketConsumer, AsyncJsonWebsocketConsumer)
 from channels.consumer import SyncConsumer, AsyncConsumer
 from channels.exceptions import StopConsumer
+from channels.db import database_sync_to_async
+
+from .models import Online
 
 
 class ChatConsumer(WebsocketConsumer):
@@ -37,24 +40,40 @@ class ChatConsumer(WebsocketConsumer):
 
 class AsyncChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
+        await self.create_online()
         self.room_name = self.scope['url_route']['kwargs']['room_name']  # создаем переменную
         await self.channel_layer.group_add(self.room_name, self.channel_name)
         await self.accept()
 
     async def disconnect(self, code):
+        await self.delete_online()
         await self.channel_layer.group_discard(self.room_name, self.channel_name)
 
     async def receive(self, text_data=None, bytes_data=None):
+        await self.refresh_online()
         await self.channel_layer.group_send(
             self.room_name,
             {
                 "type": 'chat.message',
-                'text': text_data
+                'text': self.online.name
             }
         )
 
     async def chat_message(self, event):
         await self.send(text_data=event['text'])
+
+    @database_sync_to_async
+    def create_online(self):
+        new, _ = Online.objects.get_or_create(name=self.channel_name)
+        self.online = new
+
+    @database_sync_to_async
+    def delete_online(self):
+        Online.objects.filter(name=self.channel_name).delete()
+
+    @database_sync_to_async
+    def refresh_online(self):
+        self.online.refresh_from_db()
 
 
 class BaseSyncConsumer(SyncConsumer):
