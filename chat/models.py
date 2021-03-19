@@ -17,66 +17,115 @@ class ChatParticipant(models.Model):
         verbose_name_plural = 'Additional information of user'
 
     #  Какой пользователь имеет больший id (в базе id первого пользователя меньше id второго)
-    def greatest(self, to_user):
-        if to_user > self.user_id:
-            return self.user_id, to_user
-        elif to_user < self.user_id:
-            return to_user, self.user_id
+    @staticmethod
+    def _greatest(user_one, user_two):
+        if user_two > user_one:
+            return user_one, user_two
+        elif user_two < user_one:
+            return user_two, user_one
 
     # Получаем список друзей пользователя
-    def get_friends_list(self):
+    @staticmethod
+    def get_friends_list(our_user_id):
         return FriendshipRelations.objects.filter(
-            models.Q(user_friend_one=self.user_id) | models.Q(user_friend_two=self.user_id)
+            models.Q(user_friend_one=our_user_id) | models.Q(user_friend_two=our_user_id)
         )
 
     # Получаем отправленные пользователем запросы в друзья, которые еще не приняты
-    def get_sent_friend_requests(self):
+    @staticmethod
+    def get_sent_friend_requests(our_user_id):
         return FriendshipRelations.objects.filter(
-            models.Q(status=0) & models.Q(user_action=self.user_id)
+            models.Q(status=0) & models.Q(user_action=our_user_id)
         )
 
     # Получаем все отправленные нам запросы в друзья
-    def get_friend_requests(self):
+    @staticmethod
+    def get_friend_requests(our_user_id):
         return FriendshipRelations.objects.filter(
-            (models.Q(user_friend_one=self.user_id) | models.Q(user_friend_two=self.user_id)) &
+            (models.Q(user_friend_one=our_user_id) | models.Q(user_friend_two=our_user_id)) &
             models.Q(status=0)
-        ).exclude(user_action=self.user_id)
+        ).exclude(user_action=our_user_id)
 
     # Получаем заблокированных нами пользователей
-    def get_blocked_friends(self):
+    @staticmethod
+    def get_blocked_friends(our_user_id):
         return FriendshipRelations.objects.filter(
-            (models.Q(user_friend_one=self.user_id) | models.Q(user_friend_two=self.user_id)) &
-            models.Q(status=3) & models.Q(user_action=self.user_id)
+            (models.Q(user_friend_one=our_user_id) | models.Q(user_friend_two=our_user_id)) &
+            models.Q(status=3) & models.Q(user_action=our_user_id)
         )
 
     # Создаем запрос в друзья
-    def add_friend_request(self, to_user):
-        user_one, user_two = self.greatest(to_user)
+    @staticmethod
+    def add_friend_request(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
         FriendshipRelations.objects.create(user_friend_one=user_one, user_friend_two=user_two,
-                                           status=0, user_action=self.user_id)
+                                           status=0, user_action=our_user_id)
 
     # Принимаем запрос в друзья
-    def accept_friend_request(self, to_user):
-        user_one, user_two = self.greatest(to_user)
-        FriendshipRelations.objects.get(
+    @staticmethod
+    def accept_friend_request(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
+        obj = FriendshipRelations.objects.get(
             user_friend_one=user_one, user_friend_two=user_two
-        ).update(status=1, user_action=self.user_id)
+        )
+        obj.status = 1
+        obj.user_action = our_user_id
+        obj.save()
 
     # Откланяем запрос в друзья
-    def decline_friend_request(self, to_user):
-        user_one, user_two = self.greatest(to_user)
-        FriendshipRelations.objects.get(
+    @staticmethod
+    def decline_friend_request(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
+        obj = FriendshipRelations.objects.get(
             user_friend_one=user_one, user_friend_two=user_two
-        ).update(status=2, user_action=self.user_id)
+        )
+        obj.status = 2
+        obj.user_action = our_user_id
+        obj.save()
+
+    # Закрываем наш запрос в друзья
+    @staticmethod
+    def cancel_friend_request(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
+        FriendshipRelations.objects.get(
+            user_friend_one=user_one, user_friend_two=user_two,
+            status=0, user_action=our_user_id
+        ).delete()
+
+    # Удалить из друзей
+    @staticmethod
+    def unfriend(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
+        FriendshipRelations.objects.get(
+            user_friend_one=user_one, user_friend_two=user_two,
+            status=1, user_action=our_user_id
+        ).delete()
 
     # Блокируем пользователя
-    def block_user(self, to_user):
-        user_one, user_two = self.greatest(to_user)
+    @staticmethod
+    def block_user(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
         FriendshipRelations.objects.update_or_create(
             user_friend_one=user_one,
             user_friend_two=user_two,
-            defaults={'status': 3},
+            defaults={'status': 3, 'user_action': our_user_id},
         )
+
+    # Разблокируем пользователя
+    @staticmethod
+    def unblock_user(our_user_id, to_user):
+        user_one, user_two = ChatParticipant._greatest(our_user_id, to_user)
+        FriendshipRelations.objects.get(
+            user_friend_one=user_one,
+            user_friend_two=user_two,
+            status=3,
+            user_action=our_user_id
+        ).delete()
+
+    # Получаем список наших чатов
+    @staticmethod
+    def get_chats_list(our_user_id):
+        return ChatUsers.objects.filter(user=our_user_id)
 
 
 class FriendshipRelations(models.Model):
@@ -120,6 +169,14 @@ class Chat(models.Model):
         verbose_name = 'Чат'
         verbose_name_plural = 'Чаты'
 
+    # Получение списка сообщений чата
+    def get_messages_sorted_by_date_list(self):
+        return Messages.objects.filter(chat=self.id).order_by('date')
+
+    # Получаем список всех пользователей чата
+    def get_chat_users_list(self):
+        return ChatUsers.objects.filter(chat=self.id)
+
 
 class ChatUsers(models.Model):
     """Пользователи чата"""
@@ -145,3 +202,7 @@ class Messages(models.Model):
 
     def __str__(self):
         return f'Message of user {self.user} from chat {self.chat}'
+
+    class Meta:
+        verbose_name = 'Сообщение'
+        verbose_name_plural = 'Сообщения'
