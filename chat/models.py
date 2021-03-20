@@ -180,8 +180,8 @@ class Chat(models.Model):
 
 class ChatUsers(models.Model):
     """Пользователи чата"""
-    user = models.ForeignKey(get_user_model(), related_name="chat_user", on_delete=models.CASCADE, null=True)
-    chat = models.ForeignKey(Chat, related_name="chat", on_delete=models.CASCADE, null=True)
+    user = models.ForeignKey(get_user_model(), related_name="user_chat_users", on_delete=models.CASCADE, null=True)
+    chat = models.ForeignKey(Chat, related_name="chat_chat_users", on_delete=models.CASCADE, null=True)
 
     class Meta:
         verbose_name = 'Пользователи чатов'
@@ -195,8 +195,8 @@ class ChatUsers(models.Model):
 
 class Messages(models.Model):
     """Сообщения"""
-    user = models.ForeignKey(get_user_model(), related_name="chat_user", on_delete=models.CASCADE, null=True)
-    chat = models.ForeignKey(Chat, related_name="chat", on_delete=models.CASCADE, null=True)
+    user = models.ForeignKey(get_user_model(), related_name="user_messages", on_delete=models.CASCADE, null=True)
+    chat = models.ForeignKey(Chat, related_name="chat_messages", on_delete=models.CASCADE, null=True)
     text = models.TextField("Сообщение", max_length=500)
     date = models.DateTimeField("Дата отправки", null=True)
 
